@@ -1,0 +1,17 @@
+data/
+output_dir/
+output/
+*.pth
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.lzma
+*.tar.wim
+*.tar.zst
+*.tar.lz4
+*.tar.7z
