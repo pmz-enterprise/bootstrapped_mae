@@ -4,7 +4,10 @@
 ```
 pip install requirements.txt
 ```
-
+# Dataset 
+```
+python download_cifar.py
+```
 # Usage
 
 ## baseline
@@ -21,9 +24,9 @@ bash BKmae_eval_finetune.sh
 ```
 ## MAE_ema
 ```
-bash bmae_train.sh
-bash bmae_eval_linear.sh
-bash bmae_eval_finetune.sh
+bash Bmae_train.sh
+bash Bmae_eval_linear.sh
+bash Bmae_eval_finetune.sh
 ```
 
 # info
