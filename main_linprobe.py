@@ -41,8 +41,6 @@ from engine_finetune import train_one_epoch, evaluate
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE linear probing for image classification', add_help=False)
-    parser.add_argument('--config', default='./configs/linprobe_config.yaml', type=str,
-                        help='path to config file')
     parser.add_argument('--batch_size', default=512, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     parser.add_argument('--epochs', default=100, type=int)
@@ -129,12 +127,6 @@ def main(args):
 
     cudnn.benchmark = True
 
-    with open(args.config, 'r') as f:
-        train_config = yaml.safe_load(f)
-
-    for key, value in train_config.items():
-        if hasattr(args, key):
-            setattr(args, key, value)
 
 
     # linear probe: weak augmentation

@@ -38,12 +38,7 @@ from engine_pretrain import train_one_epoch
 
 
 def get_args_parser():
-    parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
-    
-    # Add config file argument
-    parser.add_argument('--config', default='./configs/pretrain_bootema_config.yaml', type=str,
-                        help='path to config file')
-    
+    parser = argparse.ArgumentParser('MAE pre-training', add_help=False)   
     # Keep other arguments as fallback
     parser.add_argument('--batch_size', default=64, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
@@ -116,22 +111,6 @@ def get_args_parser():
 
 
 def main(args):
-    # Load config file if provided
-    if args.config:
-        with open(args.config, 'r') as f:
-            config = yaml.safe_load(f)
-        
-        # Update args with config values
-        for section in config:
-            if hasattr(args, section):
-                for key, value in config[section].items():
-                    if hasattr(args, key):
-                        setattr(args, key, value)
-                    else:
-                        setattr(args, f"{section}_{key}", value)
-            else:
-                for key, value in config[section].items():
-                    setattr(args, key, value)
 
     # Create the unique directory for this run
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)

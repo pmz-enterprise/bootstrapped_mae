@@ -37,8 +37,6 @@ from engine_pretrain import train_one_epoch
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
-    parser.add_argument('--config', default='configs/pretrain_config.yaml', type=str,
-                        help='path to config file')
     parser.add_argument('--batch_size', default=64, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     parser.add_argument('--epochs', default=400, type=int)
@@ -107,19 +105,7 @@ def get_args_parser():
 
 
 def main(args):
-    if args.config:
-        with open(args.config, 'r') as f:
-            config = yaml.safe_load(f)
-        for section in config:
-            if hasattr(args, section):
-                for key, value in config[section].items():
-                    if hasattr(args, key):
-                        setattr(args, key, value)
-                    else:
-                        setattr(args, f"{section}_{key}", value)
-            else:
-                for key, value in config[section].items():
-                    setattr(args, key, value)
+
     misc.init_distributed_mode(args)
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))

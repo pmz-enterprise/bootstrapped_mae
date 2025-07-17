@@ -8,19 +8,38 @@ OUTPUT_DIR="./output/output_mae_finetune_dir"
 mkdir -p "${OUTPUT_DIR}/checkpoints"
 mkdir -p "${OUTPUT_DIR}/logs"
 
-
 python main_finetune.py \
     --finetune "${PRETRAINED}" \
-    --config ./configs/finetune_config.yaml \
-    --batch_size 256 \
+    --batch_size 512 \
     --model vit_tiny_patch4 \
     --epochs 100 \
     --accum_iter 1 \
+    --weight_decay 0 \
+    --lr 0.005 \
     --blr 0.01 \
-    --weight_decay 0.05 \
-    --warmup_epochs 20 \
-    --data_path "${DATA_PATH}" \
+    --min_lr 0.0 \
+    --warmup_epochs 10 \
+    --data_path ./data \
+    --nb_classes 10 \
+    --device cuda \
+    --seed 0 \
+    --world_size 1 \
+    --dist_url env:// \
     --output_dir "${OUTPUT_DIR}/checkpoints" \
     --log_dir "${OUTPUT_DIR}/logs" \
-    --global_pool \
-    --nb_classes 10
+    --global_pool
+
+# python main_finetune.py \
+#     --finetune "${PRETRAINED}" \
+#     --batch_size 256 \
+#     --model vit_tiny_patch4 \
+#     --epochs 100 \
+#     --accum_iter 1 \
+#     --blr 0.01 \
+#     --weight_decay 0.05 \
+#     --warmup_epochs 20 \
+#     --data_path "${DATA_PATH}" \
+#     --output_dir "${OUTPUT_DIR}/checkpoints" \
+#     --log_dir "${OUTPUT_DIR}/logs" \
+#     --global_pool \
+#     --nb_classes 10
