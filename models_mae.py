@@ -8,7 +8,7 @@
 # timm: https://github.com/rwightman/pytorch-image-models/tree/master/timm
 # DeiT: https://github.com/facebookresearch/deit
 # --------------------------------------------------------
-
+# models_mae.py
 from functools import partial
 
 import torch
@@ -219,6 +219,13 @@ class MaskedAutoencoderViT(nn.Module):
         loss = self.forward_loss(imgs, pred, mask)
         return loss, pred, mask
 
+def mae_diet_tiny_patch4(**kwargs):
+    model = MaskedAutoencoderViT(
+        img_size=32, patch_size=4, in_chans=3,
+        embed_dim=192, depth=12, num_heads=3,
+        decoder_embed_dim=96, decoder_depth=4, decoder_num_heads=3,
+        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    return model 
 
 def mae_vit_base_patch16_dec512d8b(**kwargs):
     model = MaskedAutoencoderViT(
@@ -243,13 +250,7 @@ def mae_vit_huge_patch14_dec512d8b(**kwargs):
         mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mae_diet_tiny_patch4(**kwargs):
-    model = MaskedAutoencoderViT(
-        img_size=32, patch_size=4, in_chans=3,
-        embed_dim=192, depth=12, num_heads=3,
-        decoder_embed_dim=96, decoder_depth=4, decoder_num_heads=3,
-        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model 
+
 
 
 # set recommended archs

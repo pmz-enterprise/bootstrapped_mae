@@ -338,3 +338,111 @@ def all_reduce_mean(x):
         return x_reduce.item()
     else:
         return x
+    
+
+
+# In util/misc.py
+
+def load_model_(args, model_without_ddp, optimizer, loss_scaler): # 假设您用的是这个函数名
+    if args.resume:
+        if args.resume.startswith('https'):
+            checkpoint = torch.hub.load_state_dict_from_url(
+                args.resume, map_location='cpu', check_hash=True)
+        else:
+            print("Resuming from checkpoint %s" % args.resume)
+            checkpoint = torch.load(args.resume, map_location='cpu')
+        
+        checkpoint_model = checkpoint['model']
+        state_dict = model_without_ddp.state_dict()
+        
+        # Flag to check if we are in a bootstrap transition (stage 1 -> stage 2)
+        is_bootstrap_transition = False
+
+        # Check for size mismatch in decoder_pred
+        for k in ['decoder_pred.weight', 'decoder_pred.bias']:
+            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+                print(f"Removing key {k} from pretrained checkpoint due to size mismatch.")
+                del checkpoint_model[k]
+                is_bootstrap_transition = True # Mark that a transition is happening
+
+        # Load model weights with strict=False
+        msg = model_without_ddp.load_state_dict(checkpoint_model, strict=False)
+        print(msg) # This will print missing keys like target_norm, which is expected
+
+        # If a key was missing that exists in the new model, it's also a transition
+        if msg.missing_keys:
+             is_bootstrap_transition = True
+
+        print("Resume checkpoint %s" % args.resume)
+
+        # ----------------- START: NEW MODIFICATION -----------------
+        # Only load optimizer and scaler if it's NOT a bootstrap transition.
+        # When transitioning stages, we want a fresh optimizer.
+        if 'optimizer' in checkpoint and 'epoch' in checkpoint and not (hasattr(args, 'eval') and args.eval):
+            if is_bootstrap_transition:
+                print("Bootstrap transition detected. Skipping optimizer and scaler loading.")
+            else:
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                args.start_epoch = checkpoint['epoch'] + 1
+                if 'scaler' in checkpoint:
+                    loss_scaler.load_state_dict(checkpoint['scaler'])
+                print("With optim & scaler")
+        # ----------------- END: NEW MODIFICATION -------------------
+
+
+# in util/misc.py
+
+def load_model_2(args, model_without_ddp, optimizer, loss_scaler):
+    if args.resume:
+        if args.resume.startswith('https'):
+            checkpoint = torch.hub.load_state_dict_from_url(
+                args.resume, map_location='cpu', check_hash=True)
+        else:
+            print("Resuming from checkpoint %s" % args.resume)
+            checkpoint = torch.load(args.resume, map_location='cpu')
+        
+        checkpoint_model = checkpoint['model']
+        state_dict = model_without_ddp.state_dict()
+        
+        # Flag to check if we are in a bootstrap transition (e.g., stage 1 -> stage 2)
+        is_bootstrap_transition = False
+
+        # Check for size mismatch in decoder_pred, which indicates a transition
+        # from pixel-recon to feature-recon.
+        for k in ['decoder_pred.weight', 'decoder_pred.bias']:
+            # This check is safer: it ensures the key exists in both dicts before comparing shapes
+            if k in checkpoint_model and k in state_dict and checkpoint_model[k].shape != state_dict[k].shape:
+                print(f"Removing key {k} from pretrained checkpoint due to size mismatch.")
+                del checkpoint_model[k]
+                is_bootstrap_transition = True
+
+        # Load model weights with strict=False to handle mismatches and missing keys
+        msg = model_without_ddp.load_state_dict(checkpoint_model, strict=False)
+        print(msg)
+
+        # If there are missing keys (like 'target_norm' appearing in stage 2),
+        # it's definitely a bootstrap transition.
+        if msg.missing_keys:
+             is_bootstrap_transition = True
+             print(f"Missing keys found: {msg.missing_keys}. Marked as a bootstrap transition.")
+
+        print("Resume checkpoint %s" % args.resume)
+
+        # --- THIS IS THE KEY MODIFIED LOGIC ---
+        # Check if we should load the optimizer, scaler, and epoch number
+        if 'optimizer' in checkpoint and 'epoch' in checkpoint and not (hasattr(args, 'eval') and args.eval):
+            
+            # If it's a transition between stages...
+            if is_bootstrap_transition:
+                print("Bootstrap transition detected. SKIPPING optimizer, scaler, and epoch loading.")
+                # We explicitly set start_epoch to 0 for the new stage, so it trains from the beginning.
+                args.start_epoch = 0 
+            
+            # If it's just resuming within the same stage...
+            else:
+                print("Same-stage resume detected. Loading optimizer, scaler, and epoch.")
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                args.start_epoch = 0
+                if 'scaler' in checkpoint:
+                    loss_scaler.load_state_dict(checkpoint['scaler'])
+                print("Optimizer, scaler, and epoch loaded successfully.")

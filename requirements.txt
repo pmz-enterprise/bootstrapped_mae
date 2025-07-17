@@ -1,0 +1,8 @@
+torch==1.13.0
+torchvision==0.14.0
+torchaudio==0.13.0
+numpy==1.24.4
+timm==0.5.4
+pyyaml
+tensorboard
+ipdb

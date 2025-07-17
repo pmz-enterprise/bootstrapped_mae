@@ -16,7 +16,7 @@ import numpy as np
 import os
 import time
 from pathlib import Path
-
+import yaml
 import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
@@ -25,7 +25,7 @@ import torchvision.datasets as datasets
 
 import timm
 
-assert timm.__version__ == "0.3.2" # version check
+
 from timm.models.layers import trunc_normal_
 
 import util.misc as misc
@@ -41,14 +41,16 @@ from engine_finetune import train_one_epoch, evaluate
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE linear probing for image classification', add_help=False)
+    parser.add_argument('--config', default='./configs/linprobe_config.yaml', type=str,
+                        help='path to config file')
     parser.add_argument('--batch_size', default=512, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    parser.add_argument('--epochs', default=90, type=int)
+    parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
-    parser.add_argument('--model', default='vit_large_patch16', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='vit_tiny_patch4', type=str, metavar='MODEL',
                         help='Name of model to train')
 
     # Optimizer parameters
@@ -75,11 +77,10 @@ def get_args_parser():
                         help='Use class token instead of global pool for classification')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
+    parser.add_argument('--data_path', default='./data', type=str,
                         help='dataset path')
-    parser.add_argument('--nb_classes', default=1000, type=int,
+    parser.add_argument('--nb_classes', default=10, type=int,
                         help='number of the classification types')
-
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default='./output_dir',
@@ -128,19 +129,36 @@ def main(args):
 
     cudnn.benchmark = True
 
+    with open(args.config, 'r') as f:
+        train_config = yaml.safe_load(f)
+
+    for key, value in train_config.items():
+        if hasattr(args, key):
+            setattr(args, key, value)
+
+
     # linear probe: weak augmentation
     transform_train = transforms.Compose([
-            RandomResizedCrop(224, interpolation=3),
+            RandomResizedCrop(32, scale=(0.2, 1.0), interpolation=3),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+            transforms.Normalize(mean=[0.4913999140262604,0.4821586608886719,0.44653135538101196], std=[0.2470322698354721,0.24348516762256622,0.26158788800239563])])
     transform_val = transforms.Compose([
-            transforms.Resize(256, interpolation=3),
-            transforms.CenterCrop(224),
+            transforms.Resize(32, interpolation=3),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
-    dataset_val = datasets.ImageFolder(os.path.join(args.data_path, 'val'), transform=transform_val)
+            transforms.Normalize(mean=[0.4913999140262604,0.4821586608886719,0.44653135538101196], std=[0.2470322698354721,0.24348516762256622,0.26158788800239563])])
+    dataset_train = datasets.CIFAR10(
+        root=args.data_path,
+        train=True,
+        download=True,
+        transform=transform_train
+    )
+    dataset_val = datasets.CIFAR10(
+        root=args.data_path,
+        train=False,
+        download=True,
+        transform=transform_val
+    )
     print(dataset_train)
     print(dataset_val)
 
@@ -277,7 +295,7 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir:
+        if args.output_dir and (epoch % 10 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)

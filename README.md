@@ -19,6 +19,12 @@ This is a PyTorch/GPU re-implementation of the paper [Masked Autoencoders Are Sc
 
 * This repo is a modification on the [DeiT repo](https://github.com/facebookresearch/deit). Installation and preparation follow that repo.
 
+# Installation
+```
+pip install requirements.txt
+```
+
+
 * This repo is based on [`timm==0.3.2`](https://github.com/rwightman/pytorch-image-models), for which a [fix](https://github.com/rwightman/pytorch-image-models/issues/420#issuecomment-776459842) is needed to work with PyTorch 1.8.1+.
 
 ### Catalog

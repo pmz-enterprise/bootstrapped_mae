@@ -7,7 +7,7 @@
 # References:
 # DeiT: https://github.com/facebookresearch/deit
 # BEiT: https://github.com/microsoft/unilm/tree/master/beit
-# main_pretrain.py
+# --------------------------------------------------------
 import argparse
 import datetime
 import json
@@ -16,6 +16,7 @@ import os
 import time
 from pathlib import Path
 import yaml
+
 import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
@@ -24,7 +25,6 @@ import torchvision.datasets as datasets
 
 import timm
 
-# assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
 
 import util.misc as misc
@@ -32,13 +32,19 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
 import models_mae
 
+import model_boot_ema
+
 from engine_pretrain import train_one_epoch
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
-    parser.add_argument('--config', default='configs/pretrain_config.yaml', type=str,
+    
+    # Add config file argument
+    parser.add_argument('--config', default='./configs/pretrain_bootema_config.yaml', type=str,
                         help='path to config file')
+    
+    # Keep other arguments as fallback
     parser.add_argument('--batch_size', default=64, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     parser.add_argument('--epochs', default=400, type=int)
@@ -46,37 +52,33 @@ def get_args_parser():
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
-    parser.add_argument('--model', default='mae_diet_tiny_patch4', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='mae_diet_tiny_patch16_dec512d8b', type=str, metavar='MODEL',
                         help='Name of model to train')
-
     parser.add_argument('--input_size', default=32, type=int,
                         help='images input size')
-
     parser.add_argument('--mask_ratio', default=0.75, type=float,
                         help='Masking ratio (percentage of removed patches).')
-
     parser.add_argument('--norm_pix_loss', action='store_true',
                         help='Use (per-patch) normalized pixels as targets for computing loss')
     parser.set_defaults(norm_pix_loss=False)
 
+    # Dataset parameters
+    parser.add_argument('--data_path', default='./data', type=str,
+                        help='dataset path')
+
     # Optimizer parameters
     parser.add_argument('--weight_decay', type=float, default=0.05,
                         help='weight decay (default: 0.05)')
-
     parser.add_argument('--lr', type=float, default=None, metavar='LR',
                         help='learning rate (absolute lr)')
     parser.add_argument('--blr', type=float, default=1e-3, metavar='LR',
                         help='base learning rate: absolute_lr = base_lr * total_batch_size / 256')
     parser.add_argument('--min_lr', type=float, default=0., metavar='LR',
                         help='lower lr bound for cyclic schedulers that hit 0')
-
     parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N',
                         help='epochs to warmup LR')
 
-    # Dataset parameters
-    parser.add_argument('--data_path', default='./data', type=str,
-                        help='dataset path')
-
+    # Output parameters
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default='./output_dir',
@@ -86,7 +88,6 @@ def get_args_parser():
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='',
                         help='resume from checkpoint')
-
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--num_workers', default=10, type=int)
@@ -95,7 +96,15 @@ def get_args_parser():
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
     parser.set_defaults(pin_mem=True)
 
-    # distributed training parameters
+    # EMA parameters (add defaults or set to None if always expected from config)
+    parser.add_argument('--ema_alpha', type=float, default=0.999,
+                        help='EMA decay factor')
+    parser.add_argument('--ema_start_epoch', type=int, default=10,
+                        help='Epoch to initialize shadow model and start EMA')
+    parser.add_argument('--ema_decay_warmup_epochs', type=int, default=10,
+                        help='Number of epochs for EMA decay warmup after start')
+
+    # Distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--local_rank', default=-1, type=int)
@@ -107,9 +116,12 @@ def get_args_parser():
 
 
 def main(args):
+    # Load config file if provided
     if args.config:
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
+        
+        # Update args with config values
         for section in config:
             if hasattr(args, section):
                 for key, value in config[section].items():
@@ -120,6 +132,11 @@ def main(args):
             else:
                 for key, value in config[section].items():
                     setattr(args, key, value)
+
+    # Create the unique directory for this run
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    print(f"Outputs will be saved to: {args.output_dir}")
+
     misc.init_distributed_mode(args)
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
@@ -134,14 +151,13 @@ def main(args):
 
     cudnn.benchmark = True
 
-
-    # simple augmentation
     transform_train = transforms.Compose([
             transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.4913999140262604,0.4821586608886719,0.44653135538101196], std=[0.2470322698354721,0.24348516762256622,0.26158788800239563])])
-    
+
+    # Use the CIFAR10 dataset
     dataset_train = datasets.CIFAR10(
         root=args.data_path,
         train=True,
@@ -175,7 +191,13 @@ def main(args):
     )
     
     # define the model
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+    model = model_boot_ema.__dict__[args.model](
+        norm_pix_loss=args.norm_pix_loss,
+        enable_ema=True, # Assuming EMA is always enabled in this script
+        ema_alpha=args.ema_alpha,
+        ema_start_epoch=args.ema_start_epoch,
+        ema_decay_warmup_epochs=args.ema_decay_warmup_epochs
+    )
 
     model.to(device)
 
@@ -205,9 +227,11 @@ def main(args):
 
     misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
 
+
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
+        epoch_start_time = time.time()
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         train_stats = train_one_epoch(
@@ -216,6 +240,15 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
+        
+        # Log to wandb
+        if global_rank == 0:
+            # Calculate metrics
+            epoch_time = time.time() - epoch_start_time
+            samples_per_second = len(data_loader_train) * args.batch_size / epoch_time
+            gpu_memory = torch.cuda.max_memory_allocated() / 1024**3  # in GB
+            
+
         if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
@@ -229,10 +262,15 @@ def main(args):
                 log_writer.flush()
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
+        if hasattr(model, 'module'):
+            model.module.update_shadow() # Access original model's method via .module
+        else:
+            model.update_shadow()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+    
 
 
 if __name__ == '__main__':
