@@ -3,7 +3,7 @@
 # 基础配置
 export CUDA_VISIBLE_DEVICES=1  # 使用单GPU
 DATA_PATH="./data"
-PRETRAINED="./output/output_bmae_pretrain/checkpoints/checkpoint-199.pth"
+PRETRAINED="./output/output_bootstrap_ema_pretrain/checkpoints/checkpoint-199.pth"
 OUTPUT_DIR="./output/output_bmae_linprobe_dir"
 
 # 自动创建目录结构
@@ -17,7 +17,7 @@ python main_linprobe.py \
     --model vit_tiny_patch4 \
     --epochs 100 \
     --accum_iter 1 \
-    --blr 0.01 \
+    --blr 0.1 \
     --weight_decay 0.05 \
     --warmup_epochs 20 \
     --data_path "${DATA_PATH}" \

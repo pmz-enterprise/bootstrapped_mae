@@ -1,5 +1,5 @@
 # 设置默认参数
-export CUDA_VISIBLE_DEVICES=1 # 使用单GPU
+export CUDA_VISIBLE_DEVICES=0 # 使用单GPU
 DATA_PATH="./data"
 PRETRAINED=./output/output_bmae_pretrain/checkpoints/checkpoint-199.pth
 

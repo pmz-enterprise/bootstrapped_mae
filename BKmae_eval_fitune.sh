@@ -1,7 +1,7 @@
 # 设置默认参数
 export CUDA_VISIBLE_DEVICES=1 # 使用单GPU
 DATA_PATH="./data"
-PRETRAINED="/home/pmz/bootstrapped_mae/output/output_bkmae_pretrain/stage_4/checkpoint-49.pth"
+PRETRAINED="./output/output_bkmae_pretrain/stage_4/checkpoint-49.pth"
 
 OUTPUT_DIR="./output/output_bkmae_finetune_dir"
 # Create checkpoints and logs directories for this experiment inside the specific run folder
